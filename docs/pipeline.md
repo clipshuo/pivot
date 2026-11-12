@@ -46,6 +46,22 @@ qu'à trier les inliers et à initialiser la focale : le modèle final n'utilise
 10. **Sauvegarde.** JPEG haute qualité avec un segment XMP GPano (`ProjectionType=equirectangular`,
     `FullPanoWidthPixels`, etc.) : les viewers standards reconnaissent l'image comme un 360°.
 
+**Avec les capteurs du téléphone (`capture.json`).** Quand le dossier d'entrée contient le fichier
+écrit par l'app Pivot Capture, `sensors.py` convertit chaque quaternion mesuré en rotation monde → caméra
+dans le repère de Pivot, et quatre étapes changent :
+
+- étape 3 : seules les paires dont les directions de visée sont assez proches (moins de 85 % du grand
+  champ de l'image) sont comparées, au lieu des voisines par nom ou de toutes les paires ;
+- étape 4 : une paire dont la rotation estimée s'écarte de plus de 5° de la mesure est rejetée (faux
+  appariement sur un motif répété, ou paire dominée par la parallaxe). Toutes les images sont gardées,
+  avec l'orientation mesurée comme rotation initiale ; la focale est celle du téléphone ;
+- étape 5 : l'ajustement de faisceaux reçoit un a priori par caméra, de coût `0,5 · |ω|² / σ²` où `ω`
+  est l'écart à la mesure et `σ` = 0,5°. La focale reste fixe et la distorsion n'est pas estimée (les
+  JPEG d'un téléphone sont déjà corrigés). Une image sans appariement garde son orientation mesurée ;
+- étape 6 : la verticale vient de la mesure ; seule la première image est ramenée au centre.
+
+`--no-sensors` ignore le fichier et rétablit le pipeline par vision seule.
+
 **Mode `--baseline`.** `cv2.Stitcher` en mode PANORAMA (pipeline `cv2.detail`, projection sphérique).
 Sa sortie est recadrée sur la zone couverte : ce n'est pas un équirectangulaire 2:1, elle sert seulement
 à vérifier qu'un jeu d'images est assemblable et à comparer visuellement.

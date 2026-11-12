@@ -12,6 +12,9 @@ Les erreurs bloquantes lèvent une sous-classe de `PivotError` (code de sortie 2
 | Boucle non fermée | avertissement « Boucle non fermée » ; `boucle_fermee: false` dans les métriques | finir le tour en recouvrant largement la première image |
 | Tour incomplet | avertissement « Tour incomplet : X° couverts » | idem ; le panorama est quand même produit, partiel |
 | Parallaxe trop forte (la caméra se déplace) | avertissement « Erreur de reprojection élevée » au-delà de 2 px ; écart de boucle élevé | tourner autour de l'objectif, pas autour du corps ; éloigner les objets proches ; essayer `--seam graphcut` |
+| Parallaxe forte avec `capture.json` | même avertissement ; `capteurs.ecart_a_la_mesure_deg` élevé, peu de `paires_valides` | le panorama est complet mais les objets proches sont découpés aux raccords : pivoter le téléphone sur lui-même, sans tendre le bras, loin des meubles |
+| Aucun appariement fiable, avec `capture.json` | avertissement « panorama placé par le gyroscope seul » | décalages de 1 à 2° aux raccords ; plus de lumière, scène plus texturée |
+| `capture.json` incomplet ou illisible | avertissement « orientations du téléphone ignorées » | Pivot retombe sur la vision seule ; refaire l'export depuis l'app |
 | Focale non estimable | avertissement « Focale non estimable », valeur par défaut | fournir `--focal` |
 | Optimisation divergente | erreur `BundleAdjustmentError` | faux appariements ou scène incompatible avec une rotation pure |
 

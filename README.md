@@ -4,6 +4,9 @@ Assemble un dossier d'images prises en tournant sur soi-même en un panorama sph
 **équirectangulaire 360×180° (ratio 2:1)**, prêt à être projeté sur une sphère
 (viewers 360°, Street View, three.js, etc.).
 
+Les captures de l'app Android Pivot Capture sont assemblées avec les orientations du gyroscope, ce qui
+place aussi les images sans texture (mur blanc, ciel).
+
 Pivot ne dépend d'aucun logiciel externe (ni Hugin ni PTGui) : uniquement Python, OpenCV, NumPy et SciPy.
 
 ## Installation
@@ -42,6 +45,7 @@ pivot --input ./dataset --output ref.jpg --baseline
 | `--neighbor-range` | `2` | mode ordonné : chaque image est comparée à ses N suivantes (boucle fermée) |
 | `--focal` | auto | focale imposée, en pixels pleine résolution |
 | `--work-mp` | `1.0` | taille de la copie de travail, en mégapixels |
+| `--no-sensors` | non | ignore `capture.json` (orientations du téléphone) même s'il est dans le dossier |
 | `--no-distortion` | non | n'estime pas la distorsion radiale de l'objectif |
 | `--no-wave` | non | désactive la correction d'horizon |
 | `--no-expo` | non | désactive la compensation d'exposition |
@@ -58,6 +62,20 @@ pivot --input ./dataset --output ref.jpg --baseline
 `python -m pivot ...` est équivalent à `pivot ...`.
 
 Code de sortie : `0` si un panorama a été écrit (éventuellement avec des avertissements), `2` en cas d'erreur bloquante.
+
+### Captures de l'app Pivot Capture
+
+Si le dossier d'entrée contient un `capture.json` (écrit par l'app Android Pivot Capture), Pivot utilise
+les orientations mesurées par le téléphone : seules les paires qui se recouvrent sont comparées,
+toutes les images sont placées (même un mur blanc ou un plafond), la focale du téléphone est gardée et
+l'horizon vient de la verticale mesurée. `--unordered` et `--focal` deviennent inutiles :
+
+```bash
+pivot --input ./2026-11-12_050344 --output pano.jpg --seam graphcut
+```
+
+Le rapport gagne une section `capteurs` (paires rejetées, images placées par le gyroscope seul, écart
+entre l'orientation finale et la mesure).
 
 ### Depuis du code Python (future API)
 
@@ -96,7 +114,7 @@ debug/
 pytest
 ```
 
-31 tests, environ 5 secondes. Ils couvrent la projection (aller-retour d'un point 3D, raccord à ±180°),
+35 tests, environ 5 secondes. Ils couvrent la projection (aller-retour d'un point 3D, raccord à ±180°),
 le jacobien analytique de l'ajustement de faisceaux (comparé à des différences finies), la fermeture
 de boucle sur des données synthétiques, les coutures, la fusion, le remplissage, les métadonnées GPano,
 et le pipeline complet sur un tour synthétique dont la focale et les rotations sont connues.
@@ -112,7 +130,7 @@ pivot/
 │   ├── pipeline.md         principe des 10 étapes
 │   ├── cas-d-echec.md      cas d'échec et signalement
 │   ├── resultats.md        résultats de référence, limites connues
-│   └── feuille-de-route.md GPU, service FastAPI, capteurs du téléphone
+│   └── feuille-de-route.md GPU, service FastAPI, parallaxe
 ├── src/pivot/
 │   ├── cli.py              ligne de commande
 │   ├── config.py           paramètres par défaut, détection de la machine
@@ -124,9 +142,10 @@ pivot/
 │   ├── projection.py       étape 7 : mapping équirectangulaire
 │   ├── blending.py         étape 8 : gains, coutures, fusion
 │   ├── fill.py             étape 9 : zénith / nadir
+│   ├── sensors.py          orientations du téléphone (capture.json), a priori de l'ajustement
 │   ├── baseline.py         mode de référence cv2.Stitcher
 │   └── debug.py            visualisations, métriques, chronométrage
-└── tests/                  31 tests (pytest)
+└── tests/                  35 tests (pytest)
 ```
 
 Conventions (détaillées dans `src/pivot/models.py`) : repère caméra OpenCV (x à droite, y vers le bas,
@@ -137,4 +156,4 @@ z vers l'avant) ; `R` va du monde vers la caméra ; un pixel entier désigne le 
 - [Principe de chaque étape](docs/pipeline.md)
 - [Cas d'échec et comment ils sont signalés](docs/cas-d-echec.md)
 - [Résultats de référence et limites connues](docs/resultats.md)
-- [Pistes pour la suite](docs/feuille-de-route.md) : GPU, parallélisation, service FastAPI, gyroscope
+- [Pistes pour la suite](docs/feuille-de-route.md) : GPU, parallélisation, service FastAPI, parallaxe

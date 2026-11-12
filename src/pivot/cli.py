@@ -29,6 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--focal", type=float, default=None, help="focale imposée, en pixels pleine résolution")
     p.add_argument("--work-mp", type=float, default=1.0, help="taille de la copie de travail, en mégapixels")
     p.add_argument("--no-distortion", action="store_true", help="n'estime pas la distorsion radiale")
+    p.add_argument("--no-sensors", action="store_true",
+                   help="ignore capture.json (orientations du téléphone) même s'il est présent")
     p.add_argument("--no-wave", action="store_true", help="désactive la correction d'horizon")
     p.add_argument("--no-expo", action="store_true", help="désactive la compensation d'exposition")
     p.add_argument("--seam", choices=["voronoi", "graphcut"], default="voronoi")

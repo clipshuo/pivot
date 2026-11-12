@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import logging
 
 import numpy as np
@@ -15,6 +16,7 @@ from . import fill
 from . import geometry
 from . import io_utils
 from . import projection
+from . import sensors
 from .baseline import run_baseline
 from .config import PivotConfig, configure_runtime
 from .debug import DebugWriter, timed
@@ -97,20 +99,56 @@ def _run(cfg, report, dbg) -> StitchResult:
         report.warn(f"Moins de 100 points d'intérêt sur : {', '.join(poor)} (image floue ou sans texture).")
     dbg.keypoints(images, feats)
 
+    # Orientations mesurées par le téléphone (capture.json), si elles couvrent toutes les images.
+    R_meas = None
+    poses = sensors.load_poses(cfg.input) if cfg.sensors else None
+    if poses is not None:
+        missing = [im.name for im in images if im.name not in poses.rotations]
+        if missing:
+            report.warn(f"capture.json ne décrit pas {len(missing)} image(s) : orientations du téléphone ignorées.")
+        else:
+            R_meas = [poses.rotations[im.name] for im in images]
+            if cfg.focal is None and poses.focal_px:
+                cfg = dataclasses.replace(cfg, focal=float(poses.focal_px))
+            log.info("Orientations du téléphone lues dans capture.json : toutes les images seront placées.")
+
     # 3. Appariement + RANSAC par paire.
     with timed(report, "3 appariement"):
-        pairs = features.candidate_pairs(n, cfg.ordered, cfg.neighbor_range)
+        if R_meas is not None:
+            # Seules les paires qui se recouvrent d'après le gyroscope sont comparées.
+            f_guess = (cfg.focal * images[0].scale) if cfg.focal else float(max(ww, wh))
+            fov_long = 2 * np.degrees(np.arctan(max(ww, wh) / (2 * f_guess)))
+            pairs = sensors.overlapping_pairs(R_meas, 0.85 * fov_long)
+        else:
+            pairs = features.candidate_pairs(n, cfg.ordered, cfg.neighbor_range)
         matches = features.match_all(feats, pairs, cfg, center)
 
     # 4. Focale initiale, rotations relatives, graphe de connexion.
     with timed(report, "4 geometrie par paire"):
         focal0 = geometry.estimate_initial_focal(matches, images, cfg, report)
         geometry.refine_pairs(matches, focal0, center, cfg)
-        graph = geometry.build_graph(matches, n)
-        nodes = geometry.largest_component(graph)
-        ref = nodes[0]
-        R0 = geometry.initial_rotations(graph, nodes, ref)
         rnorm = float(np.hypot(ww, wh) / 2.0)
+        if R_meas is not None:
+            # Une paire dont la rotation contredit le gyroscope est un faux appariement
+            # (motif répété) ou une paire dominée par la parallaxe : elle est rejetée.
+            rejected = 0
+            for m in matches:
+                if m.valid and sensors.angle_deg(m.R, R_meas[m.j] @ R_meas[m.i].T) > cfg.sensor_max_gap_deg:
+                    m.valid = False
+                    rejected += 1
+            nodes, ref = list(range(n)), 0
+            R0 = {k: R_meas[k] for k in nodes}
+            linked = {k for m in matches if m.valid for k in (m.i, m.j)}
+            report.metrics["capteurs"] = {
+                "paires_candidates": len(pairs), "paires_valides": sum(m.valid for m in matches),
+                "paires_rejetees_par_le_gyroscope": rejected,
+                "images_placees_par_le_gyroscope_seul": [images[k].name for k in nodes if k not in linked],
+            }
+        else:
+            graph = geometry.build_graph(matches, n)
+            nodes = geometry.largest_component(graph)
+            ref = nodes[0]
+            R0 = geometry.initial_rotations(graph, nodes, ref)
         cameras = {k: Camera(R0[k], focal0, center[0], center[1], 0.0, rnorm) for k in nodes}
     report.metrics["paires"] = _pair_metrics(matches)
     report.metrics["focale_initiale_px_travail"] = round(focal0, 1)
@@ -122,25 +160,41 @@ def _run(cfg, report, dbg) -> StitchResult:
         report.warn(f"{len(dropped)} image(s) non reliée(s) au reste et écartée(s) : {', '.join(dropped)}. "
                     "Recouvrement insuffisant avec les voisines.")
     weak = [(m.i, m.j) for m in matches if not m.valid and min((m.j - m.i) % n, (m.i - m.j) % n) == 1]
-    if cfg.ordered and weak:
+    if cfg.ordered and weak and R_meas is None:
         report.warn(f"Paires voisines sans recouvrement fiable : {weak}.")
     loop_closed = any(m.valid and m.i in cameras and m.j in cameras and (m.j - m.i) > n / 2 for m in matches)
     report.metrics["boucle_fermee"] = bool(loop_closed)
 
     # 5. Ajustement de faisceaux.
-    err0 = geometry.reprojection_errors(cameras, matches, center)
-    gap0 = geometry.edge_consistency_deg(cameras, matches)
+    has_obs = any(m.valid and m.i in cameras and m.j in cameras for m in matches)
+    if not has_obs:                                       # possible seulement avec les capteurs
+        report.warn("Aucun appariement fiable entre images : panorama placé par le gyroscope seul, "
+                    "des décalages de 1 à 2 degrés sont à attendre aux raccords.")
+    err0 = geometry.reprojection_errors(cameras, matches, center) if has_obs else np.zeros(1)
+    gap0 = geometry.edge_consistency_deg(cameras, matches) if has_obs else np.zeros(1)
     with timed(report, "5 ajustement de faisceaux"):
-        # La distorsion n'est estimée que si la boucle est fermée : sans la contrainte des 360°,
-        # focale et distorsion se compensent et l'optimisation dérive vers une focale fausse.
-        fit_k = cfg.distortion and loop_closed
-        if cfg.distortion and not loop_closed:
-            log.info("Boucle non fermée : distorsion radiale non estimée (focale trop peu contrainte).")
-        cameras, ba_info = geometry.bundle_adjust(cameras, matches, ref, center, cfg, fit_distortion=fit_k)
-    err1 = geometry.reprojection_errors(cameras, matches, center)
+        if R_meas is not None:
+            ba_info = {"iterations": 0, "observations": 0}
+            if has_obs:
+                # La distorsion n'est pas estimée : les JPEG d'un téléphone sont déjà corrigés.
+                cameras, ba_info = geometry.bundle_adjust(
+                    cameras, matches, ref, center, cfg, fit_distortion=False,
+                    priors={k: R_meas[k] for k in cameras}, prior_sigma_deg=cfg.sensor_sigma_deg,
+                    fit_focal=cfg.focal is None)
+            dev = np.array([sensors.angle_deg(cameras[k].R, R_meas[k]) for k in cameras])
+            report.metrics["capteurs"]["ecart_a_la_mesure_deg"] = {
+                "moyen": round(float(dev.mean()), 2), "max": round(float(dev.max()), 2)}
+        else:
+            # La distorsion n'est estimée que si la boucle est fermée : sans la contrainte des 360°,
+            # focale et distorsion se compensent et l'optimisation dérive vers une focale fausse.
+            fit_k = cfg.distortion and loop_closed
+            if cfg.distortion and not loop_closed:
+                log.info("Boucle non fermée : distorsion radiale non estimée (focale trop peu contrainte).")
+            cameras, ba_info = geometry.bundle_adjust(cameras, matches, ref, center, cfg, fit_distortion=fit_k)
+    err1 = geometry.reprojection_errors(cameras, matches, center) if has_obs else np.zeros(1)
     report.metrics["paires"] = _pair_metrics(matches)     # état des paires avant mise à jour (focale initiale)
     geometry.update_pair_rotations(matches, cameras[ref], center)
-    gap1 = geometry.edge_consistency_deg(cameras, matches)
+    gap1 = geometry.edge_consistency_deg(cameras, matches) if has_obs else np.zeros(1)
     focal = cameras[ref].focal
     report.metrics["ajustement_de_faisceaux"] = {
         **ba_info,
@@ -163,13 +217,16 @@ def _run(cfg, report, dbg) -> StitchResult:
         report.warn(f"Erreur de reprojection élevée après ajustement ({err1.mean():.2f} px à l'échelle de travail) : "
                     "parallaxe probable (la caméra ne tourne pas autour de son centre optique) ou forte "
                     "distorsion de l'objectif. Attendez-vous à des fantômes ou des décalages.")
-    if cfg.ordered and not loop_closed:
+    if cfg.ordered and not loop_closed and R_meas is None:
         report.warn("Boucle non fermée : aucune correspondance fiable entre la fin et le début de la séquence. "
                     "Le tour est incomplet ou le recouvrement final est insuffisant ; le panorama sera partiel "
                     "et la dérive n'est pas corrigée.")
 
     # 6. Correction d'horizon.
-    if cfg.wave_correction:
+    if R_meas is not None:
+        # La verticale est mesurée : le monde a déjà y vers le bas. On centre seulement la première image.
+        cameras = geometry.wave_correct(cameras, ref, down=np.array([0.0, 1.0, 0.0]))
+    elif cfg.wave_correction:
         cameras = geometry.wave_correct(cameras, ref)
 
     # 7. Projection équirectangulaire de chaque image dans sa zone du panorama.

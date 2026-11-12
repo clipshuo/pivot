@@ -23,13 +23,11 @@
 - Les avertissements de `StitchReport` sont déjà rédigés pour l'utilisateur final : l'app peut les
   afficher tels quels (« tournez plus lentement », « finissez le tour »).
 
-**Capteurs du téléphone.**
-- Le gyroscope donne l'orientation de chaque image : il remplace `initial_rotations`, permet de ne
-  comparer que les paires qui se recouvrent vraiment (fin du mode `--unordered` en n²), et place les
-  images sans texture que la vision seule doit écarter.
-- L'ajustement de faisceaux peut recevoir un terme d'a priori qui retient chaque rotation près de la
-  mesure du gyroscope : plus robuste aux faux appariements et à la parallaxe.
-- La focale et la distorsion sont connues par modèle de téléphone (API caméra) : `--focal` existe déjà.
-- L'accéléromètre donne la verticale : la correction d'horizon devient exacte au lieu d'être déduite.
-- Pendant la capture, l'app peut guider l'utilisateur (vitesse de rotation, zones manquantes) à partir des
-  mêmes capteurs, ce qui supprime la plupart des cas d'échec en amont.
+**Capteurs du téléphone.** Fait : Pivot lit le `capture.json` de l'app Pivot Capture (orientations,
+focale, verticale ; voir [pipeline.md](pipeline.md)). Reste à faire :
+- La parallaxe est maintenant la première cause de défauts : l'app devrait détecter que le téléphone se
+  déplace entre deux prises (accéléromètre) et le signaler pendant la capture.
+- Côté assemblage, réduire les découpes sur les objets proches : coutures qui évitent les zones en
+  désaccord entre images, ou recalage local autour des coutures.
+- Le rejet des paires utilise un seuil fixe de 5° ; le relier à la distance estimée des objets.
+- Utiliser les orientations en mode vidéo (une orientation par image extraite).

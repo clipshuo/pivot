@@ -299,7 +299,9 @@ def _residuals_and_jacobian(f, k, norm, Ri, Rj, pi, pj):
             np.concatenate([Ji1, Ji2], axis=1), np.concatenate([Jj1, Jj2], axis=1))
 
 
-def bundle_adjust(cameras: dict, matches, ref: int, center, cfg, fit_distortion=None) -> tuple[dict, dict]:
+def bundle_adjust(cameras: dict, matches, ref: int, center, cfg, fit_distortion=None,
+                  priors: dict | None = None, prior_sigma_deg: float = 1.5,
+                  fit_focal: bool = True) -> tuple[dict, dict]:
     """Optimise conjointement toutes les rotations et la focale partagée.
 
     Inconnues : la focale f, le coefficient de distorsion radiale k (si fit_distortion, par défaut
@@ -311,6 +313,12 @@ def bundle_adjust(cameras: dict, matches, ref: int, center, cfg, fit_distortion=
     rotations courantes (jacobien analytique, creux), on résout les équations
     normales amorties, et on applique R <- exp([ω]×) · R. C'est cette étape
     qui répartit sur toutes les images la dérive accumulée et ferme la boucle.
+
+    `priors` (caméra -> rotation mesurée par le téléphone) ajoute un terme qui retient chaque
+    rotation près de sa mesure : coût 0,5 · |ω|² / σ², où ω est l'écart à la mesure (radians) et
+    σ = prior_sigma_deg. Il fixe les images sans appariement et limite l'effet de la parallaxe.
+    `fit_focal=False` garde la focale donnée (celle du téléphone) : avec peu d'appariements et de
+    la parallaxe, la laisser libre la fait dériver.
     """
     ids = sorted(cameras)
     pos = {c: k for k, c in enumerate(ids)}
@@ -336,35 +344,53 @@ def bundle_adjust(cameras: dict, matches, ref: int, center, cfg, fit_distortion=
     rows = np.concatenate([row.ravel(), row.ravel(), row3[keep_i], row3[keep_j]])
     cols = np.concatenate([np.zeros(4 * M, int), np.ones(4 * M, int), col_i[keep_i], col_j[keep_j]])
 
+    w_prior = 1.0 / np.radians(prior_sigma_deg) ** 2
+    R_prior = np.stack([priors[c] for c in free]) if priors and free else None
+
+    def prior_terms(R):
+        """Écart ω de chaque caméra libre à sa mesure, et coût associé."""
+        if R_prior is None:
+            return None, 0.0
+        om = Rotation.from_matrix(R[col >= 0] @ R_prior.transpose(0, 2, 1)).as_rotvec()
+        return om, 0.5 * w_prior * float((om ** 2).sum())
+
     def evaluate(f, k, R):
         r, Jf, Jk, Ji, Jj = _residuals_and_jacobian(f, k, norm, R[pii], R[pjj], pi, pj)
         if not fit_k:
             Jk = np.zeros_like(Jk)
+        if not fit_focal:
+            Jf = np.zeros_like(Jf)
         # Huber sur la norme de chaque erreur 2D : poids 1 sous le seuil, delta / |e| au-dessus.
         e = np.sqrt((r.reshape(M, 2, 2) ** 2).sum(axis=2))                        # (M, 2)
         cost = float(np.where(e <= delta, 0.5 * e ** 2, delta * (e - 0.5 * delta)).sum())
         w = np.repeat(np.where(e <= delta, 1.0, delta / np.maximum(e, 1e-12)), 2, axis=1).ravel()
-        return r.ravel(), (Jf, Jk, Ji, Jj), w, cost
+        om, cost_prior = prior_terms(R)
+        return r.ravel(), (Jf, Jk, Ji, Jj, om), w, cost + cost_prior
 
     r, jac, w, cost = evaluate(f, k, R)
     cost0, lam, it = cost, 1e-3, 0
     for it in range(1, 101):
-        Jf, Jk, Ji, Jj = jac
+        Jf, Jk, Ji, Jj, om = jac
         J = coo_matrix((np.concatenate([Jf.ravel(), Jk.ravel(), Ji[keep_i], Jj[keep_j]]), (rows, cols)),
                        shape=(4 * M, P)).tocsr()
         JW = J.multiply(w[:, None]).tocsr()
         A = (J.T @ JW).toarray()
         g = J.T @ (w * r)
+        if om is not None:                                # a priori : dω/dδ ≈ I pour un petit écart
+            A[np.arange(2, P), np.arange(2, P)] += w_prior
+            g[2:] += w_prior * om.ravel()
         improved = False
         while lam < 1e12:
             try:
                 D = np.diag(A).copy()
                 D[D <= 0] = 1.0                           # paramètre gelé (k non estimé)
-                dx = np.linalg.solve(A + lam * np.diag(D) + (0 if fit_k else np.diag(np.eye(P)[1])), -g)
+                frozen = np.zeros(P)                      # paramètres gelés : pivot unitaire, pas nul
+                frozen[0], frozen[1] = float(not fit_focal), float(not fit_k)
+                dx = np.linalg.solve(A + lam * np.diag(D) + np.diag(frozen), -g)
             except np.linalg.LinAlgError:
                 lam *= 10.0
                 continue
-            f_new, k_new = f + dx[0], k + (dx[1] if fit_k else 0.0)
+            f_new, k_new = f + (dx[0] if fit_focal else 0.0), k + (dx[1] if fit_k else 0.0)
             R_new = R.copy()
             R_new[col >= 0] = Rotation.from_rotvec(dx[2:].reshape(-1, 3)).as_matrix() @ R[col >= 0]
             r_new, jac_new, w_new, cost_new = evaluate(f_new, k_new, R_new)
@@ -391,7 +417,7 @@ def bundle_adjust(cameras: dict, matches, ref: int, center, cfg, fit_distortion=
 
 
 # ------------------------------------------------------------------ étape 6 : correction d'horizon
-def wave_correct(cameras: dict, ref: int) -> dict:
+def wave_correct(cameras: dict, ref: int, down: np.ndarray | None = None) -> dict:
     """Redresse le panorama pour que l'horizon soit une ligne droite.
 
     Idée de Brown & Lowe : on tient rarement la caméra en roulis, donc les axes x
@@ -400,13 +426,17 @@ def wave_correct(cameras: dict, ref: int) -> dict:
     On construit un nouveau repère monde dont l'axe y est cette verticale (vers le
     bas) et dont l'axe z suit la direction de visée de l'image de référence, qui
     se retrouve ainsi au centre du panorama.
+
+    Si `down` est fourni (verticale mesurée par le téléphone), elle est utilisée telle quelle.
     """
-    X = np.stack([c.R[0] for c in cameras.values()])     # axes x des caméras, exprimés dans le monde
-    _, vecs = np.linalg.eigh(X.T @ X)
-    down = vecs[:, 0]
-    if sum(float(down @ c.R[1]) for c in cameras.values()) < 0:   # même sens que les axes y (bas)
-        down = -down
+    if down is None:
+        X = np.stack([c.R[0] for c in cameras.values()]) # axes x des caméras, exprimés dans le monde
+        _, vecs = np.linalg.eigh(X.T @ X)
+        down = vecs[:, 0]
+        if sum(float(down @ c.R[1]) for c in cameras.values()) < 0:   # même sens que les axes y (bas)
+            down = -down
     forward = cameras[ref].R[2]
+    forward = forward - float(forward @ down) * down     # composante horizontale de la visée
     right = np.cross(down, forward)
     if np.linalg.norm(right) < 1e-6:                     # référence pointée vers le zénith ou le nadir
         return cameras

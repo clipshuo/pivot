@@ -34,6 +34,10 @@ class PivotConfig:
     ba_max_points: int = 200        # points par paire utilisés dans l'ajustement de faisceaux
     distortion: bool = True         # estime un coefficient de distorsion radiale dans l'ajustement
     wave_correction: bool = True
+    # --- capteurs du téléphone (capture.json de Pivot Capture, lu dans le dossier d'entrée)
+    sensors: bool = True            # utilise les orientations mesurées si capture.json est présent
+    sensor_sigma_deg: float = 0.5   # incertitude d'une orientation mesurée (a priori de l'ajustement)
+    sensor_max_gap_deg: float = 5.0 # une paire qui contredit le gyroscope de plus que cela est rejetée
     # --- rendu
     expo: bool = True               # compensation de gain
     seam: str = "voronoi"           # "voronoi" | "graphcut"
@@ -119,5 +123,5 @@ def config_from_args(args) -> PivotConfig:
         expo=not args.no_expo, seam=args.seam, blend=args.blend, bands=args.bands,
         fill=args.fill, fill_color=tuple(args.fill_color), jpeg_quality=args.quality,
         workers=args.workers, baseline=args.baseline,
-        debug=args.debug, debug_dir=args.debug_dir,
+        debug=args.debug, debug_dir=args.debug_dir, sensors=not args.no_sensors,
     )

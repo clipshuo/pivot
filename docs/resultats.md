@@ -23,9 +23,24 @@ images de ciel presque sans texture, dont le nombre varie légèrement d'une ex�
 - Une seule focale et un seul coefficient de distorsion pour toutes les images : pas de zoom, pas de
   mélange de caméras. Le point principal est supposé au centre de l'image.
 - La parallaxe n'est pas corrigée : le modèle est une rotation pure.
-- Les images sans texture (ciel uniforme) ne peuvent pas être placées par la vision seule ; il faudra le
-  gyroscope (voir plus bas).
+- Les images sans texture (ciel uniforme, mur blanc) ne peuvent pas être placées par la vision seule ;
+  elles le sont quand le dossier contient un `capture.json` (voir plus bas).
 - Le mode `--unordered` compare toutes les paires : le temps d'appariement croît avec le carré du nombre
   d'images.
 - L'inpainting d'un grand trou (nadir entier) donne un aplat flou : c'est un bouche-trou, pas une
   reconstruction.
+
+## Capture au téléphone avec gyroscope
+
+Intérieur de petite taille, 51 images 2448×3264 de Pivot Capture (1/33 s, ISO 1600), murs et plafond
+blancs.
+
+| Mode | Images placées | Couverture | Remarque |
+|---|---|---|---|
+| vision seule (`--no-sensors --unordered`) | 8 sur 51 | 32 % de la sphère | 26 images ont moins de 100 points d'intérêt |
+| avec `capture.json` | 51 sur 51 | 100 % | 8 à 15 paires seulement recalées par la vision |
+
+La sphère est complète, mais les objets proches (à environ 1 m) sont découpés aux
+raccords : le téléphone, tenu à bout de bras, s'est déplacé de plusieurs dizaines de centimètres entre
+les prises. Cette parallaxe (erreur de reprojection d'environ 10 px à l'échelle de travail) ne peut pas
+être corrigée par un modèle de rotation pure, avec ou sans gyroscope.
