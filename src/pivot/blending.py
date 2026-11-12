@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 
-from models import WarpedImage
+from .models import WarpedImage
 
 log = logging.getLogger("pivot")
 

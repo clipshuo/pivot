@@ -1,8 +1,16 @@
+# Python
 __pycache__/
-.pytest_cache/
-*.pyc
+*.py[cod]
+*.egg-info/
+build/
+dist/
 .venv/
-debug/
-out/
+.pytest_cache/
+
+# Données et résultats (trop lourds pour le dépôt)
+/data/
+/out/
+/debug/
 *.jpg
+*.jpeg
 *.png

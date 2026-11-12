@@ -15,8 +15,8 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 
-from config import ROI_ALIGN
-from models import Camera, WarpedImage
+from .config import ROI_ALIGN
+from .models import Camera, WarpedImage
 
 
 def equirect_rays(width: int, height: int, roi=None) -> np.ndarray:

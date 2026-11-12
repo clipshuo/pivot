@@ -17,7 +17,7 @@ import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.spatial.transform import Rotation
 
-from models import (BundleAdjustmentError, Camera, DisconnectedGraphError,
+from .models import (BundleAdjustmentError, Camera, DisconnectedGraphError,
                     InsufficientOverlapError, PairMatch)
 
 log = logging.getLogger("pivot")

@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 
-from models import ImageData, NotEnoughImagesError, PivotError
+from .models import ImageData, NotEnoughImagesError, PivotError
 
 log = logging.getLogger("pivot")
 

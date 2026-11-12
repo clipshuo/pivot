@@ -1,9 +1,10 @@
-#!/usr/bin/env python3
-"""Pivot : assemblage d'un panorama sphérique 360° équirectangulaire. Point d'entrée en ligne de commande.
+"""Ligne de commande de Pivot : assemblage d'un panorama sphérique 360° équirectangulaire.
 
 Exemple :
-    python pivot.py --input ./dataset --output pano.jpg --width 4096 \
-                    --detector sift --blend multiband --fill inpaint --debug
+    pivot --input ./dataset --output pano.jpg --width 4096 \
+          --detector sift --blend multiband --fill inpaint --debug
+
+Sans installation : PYTHONPATH=src python -m pivot --input ./dataset
 """
 from __future__ import annotations
 
@@ -11,13 +12,13 @@ import argparse
 import logging
 import sys
 
-from config import config_from_args
-from models import PivotError
-from pipeline import run_pipeline
+from .config import config_from_args
+from .models import PivotError
+from .pipeline import run_pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Assemble un dossier d'images en panorama équirectangulaire 360x180°.")
+    p = argparse.ArgumentParser(prog="pivot", description="Assemble un dossier d'images en panorama équirectangulaire 360x180°.")
     p.add_argument("--input", required=True, help="dossier d'images (jpg, png), triées par nom")
     p.add_argument("--output", default="pano.jpg", help="image de sortie (JPEG recommandé)")
     p.add_argument("--width", type=int, default=4096, help="largeur de sortie ; hauteur = largeur / 2")

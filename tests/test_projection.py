@@ -1,9 +1,10 @@
 """Projection équirectangulaire : conventions, aller-retour, raccord à ±180°."""
+import cv2
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-import projection
-from models import Camera
+from pivot import projection
+from pivot.models import Camera
 from conftest import render_view, yaw_camera
 
 
@@ -56,7 +57,6 @@ def test_zone_a_cheval_sur_180_degres(texture):
 
 def test_projection_redonne_la_texture(texture):
     """Rendre une vue puis la reprojeter doit retrouver le panorama d'origine dans la zone couverte."""
-    import cv2
     W, H, w, h = 1024, 512, 640, 480
     cam = yaw_camera(25.0, 520.0, w, h, pitch_deg=10.0)
     warped = projection.warp_image(render_view(texture, cam, w, h), cam, W, H)

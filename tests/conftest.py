@@ -1,16 +1,11 @@
-"""Configuration commune des tests : rend les modules de Pivot importables et fournit une scène synthétique."""
-import os
-import sys
-
+"""Configuration commune des tests : scène synthétique dont la géométrie est connue."""
 import cv2
 import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from models import Camera  # noqa: E402
-import projection  # noqa: E402
+from pivot.models import Camera
+from pivot import projection
 
 
 def make_texture(width: int = 2048, seed: int = 0) -> np.ndarray:

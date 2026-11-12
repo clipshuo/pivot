@@ -6,11 +6,11 @@ import cv2
 import numpy as np
 import pytest
 
-import geometry
-import pivot
-from config import PivotConfig
-from models import NotEnoughImagesError, PivotError
-from pipeline import run_pipeline
+from pivot import geometry
+from pivot import cli
+from pivot.config import PivotConfig
+from pivot.models import NotEnoughImagesError, PivotError
+from pivot.pipeline import run_pipeline
 
 
 @pytest.fixture(scope="module")
@@ -86,7 +86,7 @@ def test_erreurs_bloquantes(tmp_path):
     with pytest.raises(NotEnoughImagesError):
         run_pipeline(PivotConfig(input=str(tmp_path), output=str(tmp_path / "o.jpg")))
     # En ligne de commande, une erreur bloquante donne le code de sortie 2.
-    assert pivot.main(["--input", str(tmp_path), "--output", str(tmp_path / "o.jpg")]) == 2
+    assert cli.main(["--input", str(tmp_path), "--output", str(tmp_path / "o.jpg")]) == 2
 
 
 def test_images_sans_recouvrement(tmp_path):

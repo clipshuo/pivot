@@ -10,7 +10,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from models import ImageData, PivotError
+from .models import ImageData, PivotError
 
 _STATUS = {
     cv2.Stitcher_ERR_NEED_MORE_IMGS: "pas assez d'images reliées entre elles (recouvrement insuffisant)",

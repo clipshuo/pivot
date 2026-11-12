@@ -3,11 +3,11 @@ import cv2
 import numpy as np
 import pytest
 
-import blending
-import fill
-import io_utils
-import projection
-from config import PivotConfig
+from pivot import blending
+from pivot import fill
+from pivot import io_utils
+from pivot import projection
+from pivot.config import PivotConfig
 from conftest import render_view, yaw_camera
 
 

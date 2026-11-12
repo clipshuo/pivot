@@ -3,10 +3,10 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-import features
-import geometry
-from config import PivotConfig
-from models import Camera, InsufficientOverlapError, PairMatch
+from pivot import features
+from pivot import geometry
+from pivot.config import PivotConfig
+from pivot.models import Camera, InsufficientOverlapError, PairMatch
 
 W, H, F = 1280, 720, 900.0
 CENTER = ((W - 1) / 2.0, (H - 1) / 2.0)

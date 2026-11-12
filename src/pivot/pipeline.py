@@ -1,7 +1,7 @@
 """Orchestrateur : enchaîne les étapes 1 à 10.
 
 `run_pipeline(cfg)` est le seul point d'entrée métier. La ligne de commande
-(pivot.py) l'appelle, et une future route d'API pourra l'appeler telle quelle.
+(cli.py) l'appelle, et une future route d'API pourra l'appeler telle quelle.
 """
 from __future__ import annotations
 
@@ -9,16 +9,16 @@ import logging
 
 import numpy as np
 
-import blending
-import features
-import fill
-import geometry
-import io_utils
-import projection
-from baseline import run_baseline
-from config import PivotConfig, configure_runtime
-from debug import DebugWriter, timed
-from models import Camera, StitchReport, StitchResult
+from . import blending
+from . import features
+from . import fill
+from . import geometry
+from . import io_utils
+from . import projection
+from .baseline import run_baseline
+from .config import PivotConfig, configure_runtime
+from .debug import DebugWriter, timed
+from .models import Camera, StitchReport, StitchResult
 
 log = logging.getLogger("pivot")
 

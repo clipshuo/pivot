@@ -1,7 +1,2 @@
-# Pivot : dépendances. Testé avec Python 3.13, OpenCV 4.14, NumPy 2.4, SciPy 1.16.
-# N'installez qu'UNE variante d'OpenCV : opencv-contrib-python contient SIFT et cv2.detail.
-opencv-contrib-python>=4.8
-numpy>=1.24
-scipy>=1.10
-Pillow>=9.0        # lecture de la focale EXIF (optionnelle : sans Pillow, la focale est estimée)
-pytest>=7.0        # tests uniquement
+# Installe Pivot et ses dépendances (voir pyproject.toml), avec les outils de test.
+-e .[dev]

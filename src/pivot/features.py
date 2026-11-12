@@ -6,8 +6,8 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 
-import geometry
-from models import Features, ImageData, PairMatch, PivotError
+from . import geometry
+from .models import Features, ImageData, PairMatch, PivotError
 
 
 def create_detector(name: str, max_features: int) -> cv2.Feature2D:
