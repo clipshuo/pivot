@@ -89,8 +89,28 @@ result.report.warnings   # avertissements, en clair
 result.report.metrics    # focale, erreurs de reprojection, couverture...
 ```
 
-`run_pipeline` est le seul point d'entrée métier : la ligne de commande ne fait que construire
-un `PivotConfig`. Une route d'API pourra l'appeler telle quelle.
+`run_pipeline` est le seul point d'entrée métier : la ligne de commande et l'API ne font que construire
+un `PivotConfig`.
+
+### API HTTP
+
+```bash
+pip install -e ".[api]"
+uvicorn pivot.api:app --host 127.0.0.1 --port 8010   # --root-path /pivot-api derrière un relais
+```
+
+| Route | Rôle |
+|---|---|
+| `GET /` | page d'envoi des photos, pour tester depuis un navigateur |
+| `POST /panoramas` | photos (+ `capture.json`), options `width`, `seam`, `fill`, `unordered` ; renvoie un `id` (202) |
+| `GET /panoramas` | liste des tâches |
+| `GET /panoramas/{id}` | état (`en_attente`, `en_cours`, `termine`, `echec`), avertissements, durées, métriques |
+| `GET /panoramas/{id}/pano.jpg` | le panorama |
+| `GET /panoramas/{id}/log.txt` | journal de l'assemblage |
+
+L'assemblage tourne dans un thread, une tâche à la fois. Les tâches sont dans `PIVOT_DATA`
+(défaut `data/api/`) et survivent à un redémarrage ; une tâche interrompue passe en échec.
+Pas d'authentification.
 
 ### Sorties de `--debug`
 
@@ -133,6 +153,7 @@ pivot/
 │   └── feuille-de-route.md GPU, service FastAPI, parallaxe
 ├── src/pivot/
 │   ├── cli.py              ligne de commande
+│   ├── api.py              service HTTP (FastAPI) : envoi des photos, file de tâches
 │   ├── config.py           paramètres par défaut, détection de la machine
 │   ├── models.py           structures de données, erreurs, conventions géométriques
 │   ├── pipeline.py         orchestrateur run_pipeline (étapes 1 à 10)
